@@ -379,21 +379,26 @@ def cb(pkt):
     # than updating on the fly in order to avoid costly for loops that require a lock
     if pkt.haslayer(Dot11):
         if pkt.addr1 and pkt.addr2:
-            pkt.addr1 = pkt.addr1.lower()
-            pkt.addr2 = pkt.addr2.lower()
+            # Decode addresses to strings
+            addr1 = pkt.addr1.decode('utf-8', errors='replace') if isinstance(pkt.addr1, bytes) else str(pkt.addr1)
+            addr2 = pkt.addr2.decode('utf-8', errors='replace') if isinstance(pkt.addr2, bytes) else str(pkt.addr2)
+            addr1 = addr1.lower()
+            addr2 = addr2.lower()
 
             # Filter out all other APs and clients if asked
             if args.accesspoint:
                 # track bssid for essid
-                if (pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp)) and pkt[Dot11Elt].info in args.accesspoint:
-                    args.accesspoint.add(pkt[Dot11].addr3.lower())
+                if (pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp)):
+                    addr3 = pkt[Dot11].addr3.decode('utf-8', errors='replace') if isinstance(pkt[Dot11].addr3, bytes) else str(pkt[Dot11].addr3)
+                    if addr3.lower() in args.accesspoint:
+                        args.accesspoint.add(addr3.lower())
                 # bail if bssid is not in target list
-                if not args.accesspoint.intersection([pkt.addr1.lower(), pkt.addr2.lower()]):
+                if not args.accesspoint.intersection([addr1.lower(), addr2.lower()]):
                     # pkt does not match our target list
                     return
 
             if args.skip:
-                if pkt.addr2 in args.skip:
+                if addr2 in args.skip:
                     return
 
             # Check if it's added to our AP list
@@ -402,17 +407,20 @@ def cb(pkt):
 
             # Ignore all the noisy packets like spanning tree
 
-            if noise_filter(args.skip, pkt.addr1, pkt.addr2):
+            if noise_filter(args.skip, addr1, addr2):
                 return
 
             # Management = 1, data = 2
             if pkt.type in [1, 2]:
-                clients_APs_add(clients_APs, pkt.addr1, pkt.addr2)
+                clients_APs_add(clients_APs, addr1, addr2)
 
 
 def APs_add(clients_APs, APs, pkt, chan_arg, world_arg):
-    ssid = pkt[Dot11Elt].info
-    bssid = pkt[Dot11].addr3.lower()
+    # Decode ssid and bssid to strings
+    ssid_raw = pkt[Dot11Elt].info
+    ssid = ssid_raw.decode('utf-8', errors='replace') if isinstance(ssid_raw, bytes) else str(ssid_raw)
+    bssid_raw = pkt[Dot11].addr3
+    bssid = bssid_raw.decode('utf-8', errors='replace') if isinstance(bssid_raw, bytes) else str(bssid_raw).lower()
     try:
         # Thanks to airoscapy for below
         channel_info = pkt[Dot11Elt:3].info
